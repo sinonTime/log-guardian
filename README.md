@@ -240,25 +240,6 @@ log-guardian/
 - AI 分析失败时自动降级，不影响告警主流程
 
 ---
-
-## 📸 效果预览
-
-> **📌 提示**：运行项目后截取你的 Dashboard 和微信推送截图，
-> 放入 `screenshots/` 目录并更新下方引用路径。
-
-<table>
-  <tr>
-    <td align="center"><b>📊 Web Dashboard</b></td>
-    <td align="center"><b>📱 微信推送</b></td>
-  </tr>
-  <tr>
-    <td align="center"><i>（运行后截图替换）</i></td>
-    <td align="center"><i>（运行后截图替换）</i></td>
-  </tr>
-</table>
-
----
-
 ## 🔮 扩展思路
 
 - 💾 **持久化存储**：将告警存入 SQLite / PostgreSQL，支持历史查询
