@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  log-guardian:
+    build: .
+    container_name: log-guardian
+    ports:
+      - "5000:5000" 
+    volumes:
+      - /var/log/nginx:/var/log/nginx
+      - ./test.log:/app/test.log
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - PUSHPLUS_TOKEN=${PUSHPLUS_TOKEN}
+      - LOG_FILE=/var/log/nginx/access.log 
+    restart: unless-stopped

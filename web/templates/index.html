@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Log Guardian Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 30px;
+            background-color: #f5f7fa;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .stat-card h3 {
+            margin: 0;
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+        .stat-card .number {
+            font-size: 28px;
+            font-weight: bold;
+            color: #e74c3c;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+            padding: 12px 15px;
+            text-align: left;
+            font-size: 14px;
+        }
+        td {
+            padding: 10px 15px;
+            border-bottom: 1px solid #ecf0f1;
+            font-size: 13px;
+        }
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+        .engine-tag {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+        }
+        .engine-rule {
+            background-color: #e74c3c;
+        }
+        .engine-statistical {
+            background-color: #f39c12;
+        }
+        .engine-ai {
+            background-color: #9b59b6;
+        }
+        .log-content {
+            max-width: 500px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            background: #f8f9fa;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .no-data {
+            text-align: center;
+            color: #95a5a6;
+            padding: 40px;
+        }
+        canvas {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .refresh-info {
+            color: #95a5a6;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Log Guardian 日志监控告警系统</h1>
+
+    <!-- 统计卡片 -->
+    <div class="stats">
+        <div class="stat-card">
+            <h3>📊 总告警数</h3>
+            <div class="number" id="totalAlerts">0</div>
+        </div>
+        <div class="stat-card">
+            <h3>⚡ 规则引擎</h3>
+            <div class="number" id="ruleAlerts" style="color:#e74c3c;">0</div>
+        </div>
+        <div class="stat-card">
+            <h3>🤖 AI分析</h3>
+            <div class="number" id="aiAlerts" style="color:#9b59b6;">0</div>
+        </div>
+    </div>
+
+    <!-- 图表 -->
+    <canvas id="alertChart" width="800" height="200"></canvas>
+
+    <!-- 告警列表 -->
+    <h2>📋 最近告警记录</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>⏰ 时间</th>
+                <th>⚙️ 引擎</th>
+                <th>📝 日志内容</th>
+                <th>🤖 AI 建议</th>
+            </tr>
+        </thead>
+        <tbody id="alertBody">
+            <tr><td colspan="4" class="no-data">暂无告警记录，等待日志触发...</td></tr>
+        </tbody>
+    </table>
+    <div class="refresh-info">🔄 每 3 秒自动刷新</div>
+
+    <script>
+        // 存储历史告警数据用于图表
+        let alertHistory = [];
+        let chart = null;
+
+        // 获取引擎样式的 CSS 类名
+        function getEngineClass(engine) {
+            if (engine === 'rule') return 'engine-rule';
+            if (engine === 'statistical') return 'engine-statistical';
+            return 'engine-ai';
+        }
+
+        // 获取引擎显示名称
+        function getEngineName(engine) {
+            const names = {
+                'rule': '规则引擎',
+                'statistical': '统计异常',
+                'ai': 'AI增强'
+            };
+            return names[engine] || engine || '未知';
+        }
+
+        // 格式化日志内容（截断过长内容）
+        function formatLogContent(line) {
+            if (!line) return '-';
+            if (line.length > 80) {
+                return line.substring(0, 80) + '...';
+            }
+            return line;
+        }
+
+        // 渲染表格
+        function renderTable(alerts) {
+            const tbody = document.getElementById('alertBody');
+            if (!alerts || alerts.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="no-data">暂无告警记录，等待日志触发...</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = '';
+            // 倒序显示（最新的在前）
+            alerts.slice().reverse().forEach(alert => {
+                const row = document.createElement('tr');
+                const time = alert.time || 'N/A';
+                const engine = alert.engine || 'unknown';
+                const line = alert.line || '';
+                const aiSuggestion = alert.ai_suggestion || '';
+
+                row.innerHTML = `
+                    <td>${time}</td>
+                    <td><span class="engine-tag ${getEngineClass(engine)}">${getEngineName(engine)}</span></td>
+                    <td><div class="log-content" title="${line.replace(/"/g, '&quot;')}">${formatLogContent(line)}</div></td>
+                    <td style="font-size:12px;color:#555;">${aiSuggestion ? aiSuggestion.substring(0, 80) + (aiSuggestion.length > 50 ? '...' : '') : '-'}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // 更新统计卡片
+        function updateStats(alerts) {
+            document.getElementById('totalAlerts').textContent = alerts.length;
+            const ruleCount = alerts.filter(a => a.engine === 'rule').length;
+            document.getElementById('ruleAlerts').textContent = ruleCount;
+            const aiCount = alerts.filter(a => a.ai_suggestion).length;
+            document.getElementById('aiAlerts').textContent = aiCount;
+        }
+
+        // 绘制图表
+        function drawChart(alerts) {
+            // 按小时聚合告警数
+            const hourlyCount = {};
+            alerts.forEach(a => {
+                if (a.time) {
+                    const hour = a.time.substring(0, 13) + ':00'; // 取到小时
+                    hourlyCount[hour] = (hourlyCount[hour] || 0) + 1;
+                }
+            });
+
+            const labels = Object.keys(hourlyCount).slice(-12); // 最近12小时
+            const data = labels.map(h => hourlyCount[h]);
+
+            const ctx = document.getElementById('alertChart').getContext('2d');
+            
+            if (chart) {
+                chart.destroy();
+            }
+
+            if (labels.length === 0) {
+                ctx.font = '16px Arial';
+                ctx.fillStyle = '#95a5a6';
+                ctx.textAlign = 'center';
+                ctx.fillText('暂无数据，等待告警触发...', 400, 100);
+                return;
+            }
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '告警数量',
+                        data: data,
+                        borderColor: '#e74c3c',
+                        backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '📈 告警趋势（按小时）'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 从 API 获取数据并更新页面
+        async function fetchAlerts() {
+            try {
+                const response = await fetch('/api/alerts');
+                const data = await response.json();
+                alertHistory = data;
+                renderTable(data);
+                updateStats(data);
+                drawChart(data);
+            } catch (err) {
+                console.error('获取告警数据失败:', err);
+            }
+        }
+
+        // 每 3 秒刷新一次
+        setInterval(fetchAlerts, 3000);
+        // 立即执行一次
+        fetchAlerts();
+    </script>
+</body>
+</html>
